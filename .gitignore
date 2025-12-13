@@ -1,0 +1,21 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Build outputs
+build/
+*.o
+*.out
+dhcp_capture
+
+# Runtime data
+events.log
+*.log
+
+# OS files
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
