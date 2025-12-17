@@ -1,7 +1,4 @@
 // dhcp_capture.cpp
-// macOS-friendly libpcap DHCP capture and minimal parser
-// Build: clang++ -std=c++17 -O2 -o dhcp_capture dhcp_capture.cpp -lpcap
-// Run:  sudo ./dhcp_capture en0 events.log
 
 #include <pcap.h>
 #include <arpa/inet.h>
@@ -15,6 +12,7 @@
 #include <ctime>
 #include <vector>
 #include <map>
+#include <string>
 
 using namespace std;
 
@@ -101,6 +99,45 @@ void write_json_event(const string& outfile, const map<string,string>& m) {
     ofs.close();
 }
 
+// Parse DHCP options and extract hostname (option 12 / 81)
+string get_dhcp_hostname(const u_char* options, int len) {
+    int i = 0;
+
+    while (i < len) {
+        uint8_t opt = options[i];
+
+        // End option: stop parsing
+        if (opt == 255) {
+            break;
+        }
+
+        // Pad option: just skip 1 byte
+        if (opt == 0) {
+            i += 1;
+            continue;
+        }
+
+        // Safety: ensure length byte exists
+        if (i + 1 >= len) break;
+
+        uint8_t opt_len = options[i + 1];
+
+        // Safety: ensure value fits inside buffer
+        if (i + 2 + opt_len > len) break;
+
+        // Option 12 = Host Name
+        // Option 81 = FQDN (we treat it as hostname for UI)
+        if (opt == 12 || opt == 81) {
+            return string((const char*)(options + i + 2), opt_len);
+        }
+
+        // Move to next option
+        i += 2 + opt_len;
+    }
+
+    return "";
+}
+
 void packet_handler(u_char *user, const struct pcap_pkthdr *h, const u_char *bytes) {
     const string outfile = *((string*)user);
 
@@ -137,6 +174,7 @@ void packet_handler(u_char *user, const struct pcap_pkthdr *h, const u_char *byt
 
     int options_len = h->caplen - (options - bytes);
     int msgtype = get_dhcp_message_type(options, options_len);
+    string hostname = get_dhcp_hostname(options, options_len);
 
     map<string,string> out;
     out["ts"] = now_iso();
@@ -148,6 +186,10 @@ void packet_handler(u_char *user, const struct pcap_pkthdr *h, const u_char *byt
     out["giaddr"] = ip_to_str(giaddr);
     out["sport"] = to_string(sport);
     out["dport"] = to_string(dport);
+    if (!hostname.empty()) {
+        out["hostname"] = hostname;
+    }
+
 
     string type_str = "UNKNOWN";
     switch (msgtype) {
@@ -165,7 +207,7 @@ void packet_handler(u_char *user, const struct pcap_pkthdr *h, const u_char *byt
 
     write_json_event(outfile, out);
 
-    cout << out["ts"] << " | " << client_mac << " | " << type_str << " | xid=" << xid << " | yi=" << out["yiaddr"] << "\n";
+    cout << out["ts"] << " | " << client_mac << " | host=" << hostname << " | " << type_str << " | xid=" << xid << " | yi=" << out["yiaddr"] << "\n";
 }
 
 int main(int argc, char* argv[]) {
