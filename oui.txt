@@ -1,0 +1,6 @@
+0A:F4:9E Apple
+58:EF:68 Apple
+24:DF:A7 Samsung
+FC:E9:98 Intel
+3C:5A:B4 Google
+B8:27:EB RaspberryPi
